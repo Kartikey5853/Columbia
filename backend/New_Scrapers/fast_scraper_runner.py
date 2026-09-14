@@ -58,6 +58,8 @@ def start_chrome() -> subprocess.Popen:
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-web-security",
+        "--disable-blink-features=AutomationControlled",
+        "--disable-infobars",
         "--disable-features=BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights",
     ])
 
@@ -83,7 +85,7 @@ async def connect_to_chrome(pw):
 async def _run_site(context: BrowserContext, site, script_name, url, logger):
     page = await context.new_page()
     with suppress(Exception):
-        await page.expose_function("updateScraperProgress", lambda progress: update_site_status(site, progress))
+        await page.add_init_script("window.updateScraperProgress = function(p) { window.__SCRAPER_PROGRESS__ = p; };")
     def _handle_console(msg):
         try:
             logger.info("[%s] %s", site.upper(), msg.text)

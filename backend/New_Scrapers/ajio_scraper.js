@@ -39,7 +39,12 @@
             updated_at: new Date().toISOString() };
         window.__SCRAPER_PROGRESS__ = payload;
         if (typeof window.updateScraperProgress === "function") {
-            try { window.updateScraperProgress(payload); } catch (_) {}
+            try {
+                const res = window.updateScraperProgress(payload);
+                if (res && typeof res.catch === "function") {
+                    res.catch(() => {});
+                }
+            } catch (_) {}
         }
     };
 
@@ -64,49 +69,65 @@
             `Fetching AJIO Page ${page + 1} | API currentPage=${page}`
         );
 
+        let lastError;
+        for (let attempt = 1; attempt <= 5; attempt++) {
+            try {
+                const response = await fetch(
+                    url,
+                    {
+                        method: "GET",
+                        credentials: "same-origin",
+                        headers: {
+                            "accept": "application/json, text/plain, */*"
+                        }
+                    }
+                );
 
-        const response = await fetch(
-            url,
-            {
-                method: "GET",
-
-                credentials: "same-origin",
-
-                headers: {
-                    "accept": "application/json, text/plain, */*"
+                if (response.status === 429 || response.status >= 500) {
+                    console.warn(`HTTP ${response.status} on AJIO Page ${page + 1}, attempt ${attempt}/5`);
+                    if (attempt < 5) {
+                        const waitMs = attempt * 3000;
+                        console.log(`Waiting ${waitMs}ms before retry...`);
+                        await sleep(waitMs);
+                        continue;
+                    }
                 }
+
+                if (!response.ok) {
+                    throw new Error(
+                        `HTTP ${response.status} on AJIO Page ${page + 1}`
+                    );
+                }
+
+                const contentType =
+                    response.headers.get("content-type") || "";
+
+                if (!contentType.includes("application/json")) {
+                    const text =
+                        await response.text();
+                    if (attempt < 5) {
+                        console.warn(`AJIO returned non-JSON (${contentType}) on page ${page + 1}, retrying...`);
+                        await sleep(attempt * 3000);
+                        continue;
+                    }
+                    throw new Error(
+                        `Expected JSON but received ${contentType}. ` +
+                        `Response starts with: ${text.slice(0, 200)}`
+                    );
+                }
+
+                return await response.json();
+            } catch (err) {
+                lastError = err;
+                console.warn(`Error on AJIO page ${page + 1}, attempt ${attempt}/5:`, err);
+                if (attempt < 5) {
+                    await sleep(attempt * 3000);
+                    continue;
+                }
+                throw err;
             }
-        );
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                `HTTP ${response.status} on AJIO Page ${page + 1}`
-            );
-
         }
-
-
-        const contentType =
-            response.headers.get("content-type") || "";
-
-
-        if (!contentType.includes("application/json")) {
-
-            const text =
-                await response.text();
-
-
-            throw new Error(
-                `Expected JSON but received ${contentType}. ` +
-                `Response starts with: ${text.slice(0, 200)}`
-            );
-
-        }
-
-
-        return await response.json();
+        throw lastError || new Error(`Failed to fetch AJIO page ${page + 1} after 5 attempts`);
 
     }
 

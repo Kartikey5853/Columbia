@@ -19,9 +19,17 @@
         };
         window.__SCRAPER_PROGRESS__ = payload;
         if (typeof window.updateScraperProgress === "function") {
-            try { window.updateScraperProgress(payload); } catch (_) {}
+            try {
+                const res = window.updateScraperProgress(payload);
+                if (res && typeof res.catch === "function") {
+                    res.catch(() => {});
+                }
+            } catch (_) {}
         }
     };
+
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const randomDelay = () => 1200 + Math.floor(Math.random() * 1000);
 
     let page = 1;
 
@@ -29,22 +37,45 @@
         console.log(`Fetching Page ${page}...`);
         window.updateProgress({ stage: "Collecting Products", current: page, total: page + 1 });
 
-        let response;
-        try {
-            response = await fetch(
-                `${BASE_URL}/products.json?limit=${LIMIT}&page=${page}`
-            );
-        } catch (fetchErr) {
-            console.error(`Network error on Page ${page}:`, fetchErr);
-            break;
+        let data = null;
+        let success = false;
+        for (let attempt = 1; attempt <= 5; attempt++) {
+            try {
+                const response = await fetch(
+                    `${BASE_URL}/products.json?limit=${LIMIT}&page=${page}`
+                );
+
+                if (!response.ok) {
+                    console.warn(`HTTP ${response.status} on Adventuras Page ${page}, attempt ${attempt}/5`);
+                    if (attempt < 5) {
+                        const waitMs = attempt * 3000;
+                        console.log(`Waiting ${waitMs}ms before retry...`);
+                        await sleep(waitMs);
+                        continue;
+                    }
+                    console.error(`HTTP ${response.status} on Page ${page} after 5 attempts`);
+                    break;
+                }
+
+                data = await response.json();
+                success = true;
+                break;
+            } catch (fetchErr) {
+                console.warn(`Network error on Adventuras Page ${page}, attempt ${attempt}/5:`, fetchErr);
+                if (attempt < 5) {
+                    const waitMs = attempt * 3000;
+                    await sleep(waitMs);
+                    continue;
+                }
+                console.error(`Persistent network error on Page ${page}:`, fetchErr);
+                break;
+            }
         }
 
-        if (!response.ok) {
-            console.error(`HTTP ${response.status} on Page ${page}`);
+        if (!success || !data) {
+            console.error(`Stopping Adventuras pagination at page ${page} due to persistent error.`);
             break;
         }
-
-        const data = await response.json();
 
         if (!data.products || data.products.length === 0) {
             console.log(`Page ${page} returned no products. Finished pagination.`);
@@ -91,7 +122,7 @@
         }
 
         page++;
-        await new Promise(r => setTimeout(r, 400));
+        await sleep(randomDelay());
     }
 
     const totalPages = Math.max(1, page);
