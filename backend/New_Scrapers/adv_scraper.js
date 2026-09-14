@@ -23,21 +23,35 @@
         }
     };
 
-    const page = 1;
-    console.log(`Fetching Page ${page} (single page fetch)...`);
-    window.updateProgress({ stage: "Collecting Products", current: 1, total: 1 });
+    let page = 1;
 
-    const response = await fetch(
-        `${BASE_URL}/products.json?limit=${LIMIT}&page=1`
-    );
+    while (true) {
+        console.log(`Fetching Page ${page}...`);
+        window.updateProgress({ stage: "Collecting Products", current: page, total: page + 1 });
 
-    if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-    }
+        let response;
+        try {
+            response = await fetch(
+                `${BASE_URL}/products.json?limit=${LIMIT}&page=${page}`
+            );
+        } catch (fetchErr) {
+            console.error(`Network error on Page ${page}:`, fetchErr);
+            break;
+        }
 
-    const data = await response.json();
+        if (!response.ok) {
+            console.error(`HTTP ${response.status} on Page ${page}`);
+            break;
+        }
 
-    if (data.products && data.products.length > 0) {
+        const data = await response.json();
+
+        if (!data.products || data.products.length === 0) {
+            console.log(`Page ${page} returned no products. Finished pagination.`);
+            break;
+        }
+
+        let pageColumbiaCount = 0;
         for (const product of data.products) {
             if (
                 !product.vendor ||
@@ -46,6 +60,7 @@
                 continue;
             }
 
+            pageColumbiaCount++;
             for (const variant of (product.variants || [])) {
                 window.output.push({
                     source: "adventuras",
@@ -65,10 +80,23 @@
                 });
             }
         }
+
+        console.log(
+            `Page ${page}: ${data.products.length} products (${pageColumbiaCount} Columbia). Total SKUs so far: ${window.output.length}`
+        );
+
+        if (data.products.length < LIMIT) {
+            console.log(`Page ${page} returned less than ${LIMIT} products. Finished pagination.`);
+            break;
+        }
+
+        page++;
+        await new Promise(r => setTimeout(r, 400));
     }
 
+    const totalPages = Math.max(1, page);
     console.log(
-        `Collected ${window.output.length} products`
+        `Collected ${window.output.length} products across ${totalPages} pages`
     );
 
     console.log("--------------------------------");
@@ -78,7 +106,7 @@
     console.log("Total SKUs :", window.output.length);
   
     console.log("--------------------------------");
-    window.updateProgress({ stage: "Completed", current: 1, total: 1 });
+    window.updateProgress({ stage: "Completed", current: totalPages, total: totalPages });
 
     // Download JSON
 

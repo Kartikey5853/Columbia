@@ -1,6 +1,11 @@
 """Run the Flipkart scraper and promote its output into the shared tuples."""
 from __future__ import annotations
-import os, argparse, asyncio
+import os, sys, argparse, asyncio
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from data_scraper import flipkart_scraper
 from processing.process_status import mark_started, mark_stopped, update_site_status
 from processing.platform_paths import log_path

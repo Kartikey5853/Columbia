@@ -132,7 +132,7 @@ async def _run_site(context: BrowserContext, site, script_name, url, logger):
             # JSON artifact directly, guaranteeing a real file on disk.
             for _ in range(1800):
                 await sync_progress()
-                if await page.evaluate("Array.isArray(window.__MYNTRA_PRODUCTS__)"): break
+                if await page.evaluate("window.__MYNTRA_SCRAPER_DONE__ === true"): break
                 await page.wait_for_timeout(1000)
             products = await page.evaluate("window.__MYNTRA_PRODUCTS__")
             import json

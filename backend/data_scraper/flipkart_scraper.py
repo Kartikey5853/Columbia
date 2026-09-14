@@ -1,8 +1,14 @@
 import asyncio
 import json
 import re
+import sys
 from datetime import datetime, timezone
 from urllib.parse import urlparse, parse_qs
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
@@ -290,7 +296,7 @@ async def scrape_search_pages(context):
         loaded = await wait_for_products(page)
 
         if not loaded:
-            print("[SEARCH] ❌ No product cards found.")
+            print("[SEARCH] [X] No product cards found.")
             break
 
         if total_pages_detected is None:
@@ -453,7 +459,7 @@ async def scrape_one_pdp(context, product, index, total):
     except Exception as e:
 
         print(
-            f"[PDP {index}/{total}] ❌ ERROR: {e}"
+            f"[PDP {index}/{total}] [ERROR]: {e}"
         )
 
         return {
@@ -573,7 +579,7 @@ async def main(headless=False):
             print("=" * 70)
 
             if not products:
-                print("❌ No products found.")
+                print("[X] No products found.")
                 update_site_status("flipkart", {
                     "running": False,
                     "stage": "Failed",
