@@ -18,7 +18,7 @@ from processing.structured_logging import get_scraper_logger
 from processing.platform_paths import log_path
 
 SCRIPTS = {
-    "ajio": ("ajio_scraper.js", "https://www.ajio.com/search/?text=columbia"),
+    "ajio": ("ajio_scraper.js", "https://www.ajio.com/b/columbia"),
     "myntra": ("mynthra_scraper.js", "https://www.myntra.com/columbia"),
     "columbia": ("columbia_scraper.js", "https://www.columbiasportswear.co.in/"),
     # The former Shopify collection route now returns 404.  The scraper uses
@@ -84,7 +84,13 @@ async def _run_site(context: BrowserContext, site, script_name, url, logger):
     page = await context.new_page()
     with suppress(Exception):
         await page.expose_function("updateScraperProgress", lambda progress: update_site_status(site, progress))
-    page.on("console", lambda msg: logger.info("[%s] %s", site.upper(), msg.text))
+    def _handle_console(msg):
+        try:
+            logger.info("[%s] %s", site.upper(), msg.text)
+        except Exception:
+            pass
+
+    page.on("console", _handle_console)
     destination = dated_json_path(site, datetime.now().strftime("%Y-%m-%d"))
     destination.parent.mkdir(parents=True, exist_ok=True)
     download_task = None
@@ -107,7 +113,7 @@ async def _run_site(context: BrowserContext, site, script_name, url, logger):
         if not script_file:
             script_file = BASE_DIR / "New_Scrapers" / script_name
         script = script_file.read_text(encoding="utf-8")
-        if site != "myntra":
+        if site not in ("myntra", "tata_lux", "ajio"):
             download_task = asyncio.create_task(page.wait_for_event("download", timeout=1_800_000))
         # Start the async IIFE without awaiting it. The runner must poll the
         # page's progress state while the scraper is still fetching pages.
@@ -165,17 +171,28 @@ async def _run_site(context: BrowserContext, site, script_name, url, logger):
                 update_site_status(site, {"running": False, "stage": "Completed", "current": 1, "total": 1, "message": f"Saved {destination.name}"})
                 return site, str(destination)
         if site == "ajio":
-            fn = "downloadAjioJSON"
-            await page.wait_for_function(f"typeof window.{fn} === 'function'", timeout=120_000)
-            # Ajio defines its download helper before pagination starts. Wait
-            # for the scraper's explicit completion flag while forwarding the
-            # in-page progress state to the backend.
             for _ in range(1800):
                 await sync_progress()
                 if await page.evaluate("window.__AJIO_SCRAPER_DONE__ === true"):
                     break
                 await page.wait_for_timeout(1000)
-            await page.evaluate(f"window.{fn}()")
+            products = await page.evaluate("window.__AJIO_PRODUCTS__")
+            if not products or len(products) == 0:
+                error = await page.evaluate("window.__AJIO_SCRAPER_ERROR__")
+                raise RuntimeError(f"Ajio scraped 0 products. Error: {error or 'Unknown error'}")
+            import json
+            destination.write_text(json.dumps({
+                "schema_version": 1, "source": "ajio",
+                "scrape_date": datetime.now().strftime("%Y-%m-%d"),
+                "scraped_at": datetime.now().isoformat(), "products": products,
+            }, indent=2, ensure_ascii=False), encoding="utf-8")
+            from processing.platform_paths import latest_json_path
+            latest_p = latest_json_path("ajio")
+            latest_p.parent.mkdir(parents=True, exist_ok=True)
+            latest_p.write_text(destination.read_text(encoding="utf-8"), encoding="utf-8")
+            logger.info("ajio saved directly to %s (%d products)", destination, len(products))
+            update_site_status(site, {"running": False, "stage": "Completed", "current": 1, "total": 1, "message": f"Saved {destination.name} ({len(products)} products)"})
+            return site, str(destination)
         while not download_task.done():
             await sync_progress()
             await page.wait_for_timeout(1000)

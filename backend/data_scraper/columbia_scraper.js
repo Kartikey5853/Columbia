@@ -91,31 +91,49 @@ window.updateProgress = function (progress) {
     }
 };
 
-const page = 1;
-console.log(`Fetching Page ${page} (single page fetch)...`);
-window.updateProgress({ stage: "Collecting Products", current: 1, total: 1 });
+let cursor = null;
+let hasNextPage = true;
+let page = 1;
 
-const response = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Storefront-Access-Token": TOKEN
-    },
-    body: JSON.stringify({
-        query: QUERY,
-        variables: {
-            first: 250,
-            after: null
-        }
-    })
-});
+while (hasNextPage) {
+    console.log(`Fetching Page ${page} (cursor: ${cursor || "start"})...`);
+    window.updateProgress({ stage: "Collecting Products", current: page, total: page + 1 });
 
-const json = await response.json();
-if (json.errors) {
-    console.error(json.errors);
-} else {
+    let response;
+    try {
+        response = await fetch(ENDPOINT, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Shopify-Storefront-Access-Token": TOKEN
+            },
+            body: JSON.stringify({
+                query: QUERY,
+                variables: {
+                    first: 250,
+                    after: cursor
+                }
+            })
+        });
+    } catch (fetchErr) {
+        console.error(`Network error on page ${page}:`, fetchErr);
+        break;
+    }
+
+    if (!response.ok) {
+        console.error(`HTTP error ${response.status} on page ${page}`);
+        break;
+    }
+
+    const json = await response.json();
+    if (json.errors) {
+        console.error("GraphQL errors on page " + page + ":", json.errors);
+        break;
+    }
+
     const search = json.data?.search;
-    for (const edge of (search?.edges || [])) {
+    const edges = search?.edges || [];
+    for (const edge of edges) {
         const product = edge.node;
         for (const { node } of (product.variants?.edges || [])) {
             window.output.push({
@@ -134,13 +152,24 @@ if (json.errors) {
             });
         }
     }
+
+    console.log(`Page ${page}: fetched ${edges.length} products. Total SKUs so far: ${window.output.length}`);
+
+    hasNextPage = Boolean(search?.pageInfo?.hasNextPage) && edges.length > 0;
+    cursor = search?.pageInfo?.endCursor || (edges.length > 0 ? edges[edges.length - 1].cursor : null);
+    page++;
+
+    if (hasNextPage) {
+        await new Promise(r => setTimeout(r, 500));
+    }
 }
 
-console.log(`Collected ${window.output.length} products`);
+const totalPages = Math.max(1, page - 1);
+console.log(`Collected ${window.output.length} products across ${totalPages} pages`);
 console.log("Done!");
 console.log(window.output);
 console.log("Total SKUs:", window.output.length);
-window.updateProgress({ stage: "Completed", current: 1, total: 1 });
+window.updateProgress({ stage: "Completed", current: totalPages, total: totalPages });
 
 // Download JSON
 

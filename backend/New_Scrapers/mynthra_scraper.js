@@ -88,16 +88,28 @@
         }
 
 
-        const response = await fetch(
-            url,
-            {
-                method: "GET",
+        let response;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            response = await fetch(
+                url,
+                {
+                    method: "GET",
 
-                credentials: "same-origin",
+                    credentials: "same-origin",
 
-                headers
+                    headers
+                }
+            );
+
+            if (response.status === 429 && attempt < 3) {
+                console.warn(
+                    `HTTP 429 on Page ${page}, waiting ${attempt * 3000}ms before retry ${attempt}/3...`
+                );
+                await sleep(attempt * 3000);
+                continue;
             }
-        );
+            break;
+        }
 
 
         if (!response.ok) {
@@ -427,7 +439,9 @@
         // ========================================================
 
         if (
-            data.hasNextPage === false
+            data.hasNextPage === false ||
+            products.length === 0 ||
+            page >= totalPages
         ) {
 
             console.log(
@@ -515,6 +529,7 @@
 
     window.__MYNTRA_PRODUCTS__ =
         finalProducts;
+    window.__MYNTRA_SCRAPER_DONE__ = true;
     updateProgress({ stage: "Completed", current: page, total: page });
 
 

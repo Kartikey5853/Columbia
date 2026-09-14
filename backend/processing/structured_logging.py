@@ -55,8 +55,13 @@ def get_scraper_logger(scraper: str, log_file: Path | None = None) -> logging.Lo
 
     class FlushStreamHandler(logging.StreamHandler):
         def emit(self, record: logging.LogRecord) -> None:
-            super().emit(record)
             try:
+                msg = self.format(record)
+                stream = self.stream
+                try:
+                    stream.write(msg + self.terminator)
+                except UnicodeEncodeError:
+                    stream.write(msg.encode("ascii", errors="replace").decode("ascii") + self.terminator)
                 self.flush()
             except Exception:
                 pass
