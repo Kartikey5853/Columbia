@@ -87,9 +87,17 @@ window.updateProgress = function (progress) {
     };
     window.__SCRAPER_PROGRESS__ = payload;
     if (typeof window.updateScraperProgress === "function") {
-        try { window.updateScraperProgress(payload); } catch (_) {}
+        try {
+            const res = window.updateScraperProgress(payload);
+            if (res && typeof res.catch === "function") {
+                res.catch(() => {});
+            }
+        } catch (_) {}
     }
 };
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const randomDelay = () => 1200 + Math.floor(Math.random() * 1000);
 
 let cursor = null;
 let hasNextPage = true;
@@ -99,35 +107,64 @@ while (hasNextPage) {
     console.log(`Fetching Page ${page} (cursor: ${cursor || "start"})...`);
     window.updateProgress({ stage: "Collecting Products", current: page, total: page + 1 });
 
-    let response;
-    try {
-        response = await fetch(ENDPOINT, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Shopify-Storefront-Access-Token": TOKEN
-            },
-            body: JSON.stringify({
-                query: QUERY,
-                variables: {
-                    first: 250,
-                    after: cursor
+    let json = null;
+    let success = false;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+        try {
+            const response = await fetch(ENDPOINT, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Shopify-Storefront-Access-Token": TOKEN
+                },
+                body: JSON.stringify({
+                    query: QUERY,
+                    variables: {
+                        first: 250,
+                        after: cursor
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                console.warn(`HTTP ${response.status} on Columbia Page ${page}, attempt ${attempt}/5`);
+                if (attempt < 5) {
+                    const waitMs = attempt * 3000;
+                    console.log(`Waiting ${waitMs}ms before retry...`);
+                    await sleep(waitMs);
+                    continue;
                 }
-            })
-        });
-    } catch (fetchErr) {
-        console.error(`Network error on page ${page}:`, fetchErr);
-        break;
+                console.error(`HTTP error ${response.status} on page ${page} after 5 attempts`);
+                break;
+            }
+
+            json = await response.json();
+            if (json.errors) {
+                console.warn(`GraphQL errors on page ${page}, attempt ${attempt}/5:`, json.errors);
+                if (attempt < 5) {
+                    await sleep(attempt * 2000);
+                    continue;
+                }
+                console.error(`GraphQL errors persisted on page ${page}`);
+                break;
+            }
+
+            success = true;
+            break;
+        } catch (fetchErr) {
+            console.warn(`Network error on Columbia page ${page}, attempt ${attempt}/5:`, fetchErr);
+            if (attempt < 5) {
+                const waitMs = attempt * 3000;
+                await sleep(waitMs);
+                continue;
+            }
+            console.error(`Persistent network error on page ${page}:`, fetchErr);
+            break;
+        }
     }
 
-    if (!response.ok) {
-        console.error(`HTTP error ${response.status} on page ${page}`);
-        break;
-    }
-
-    const json = await response.json();
-    if (json.errors) {
-        console.error("GraphQL errors on page " + page + ":", json.errors);
+    if (!success || !json) {
+        console.error(`Stopping Columbia pagination at page ${page} due to persistent error.`);
         break;
     }
 
@@ -160,7 +197,7 @@ while (hasNextPage) {
     page++;
 
     if (hasNextPage) {
-        await new Promise(r => setTimeout(r, 500));
+        await sleep(randomDelay());
     }
 }
 

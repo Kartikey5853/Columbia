@@ -26,7 +26,12 @@
             updated_at: new Date().toISOString() };
         window.__SCRAPER_PROGRESS__ = payload;
         if (typeof window.updateScraperProgress === "function") {
-            try { window.updateScraperProgress(payload); } catch (_) {}
+            try {
+                const res = window.updateScraperProgress(payload);
+                if (res && typeof res.catch === "function") {
+                    res.catch(() => {});
+                }
+            } catch (_) {}
         }
     };
 

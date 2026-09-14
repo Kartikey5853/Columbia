@@ -171,7 +171,10 @@
 
         if (typeof window.updateScraperProgress === "function") {
             try {
-                window.updateScraperProgress(payload);
+                const res = window.updateScraperProgress(payload);
+                if (res && typeof res.catch === "function") {
+                    res.catch(() => {});
+                }
             } catch (_) {}
         }
     };

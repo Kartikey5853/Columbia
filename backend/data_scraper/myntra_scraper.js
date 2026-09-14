@@ -35,7 +35,12 @@
         };
         window.__SCRAPER_PROGRESS__ = payload;
         if (typeof window.updateScraperProgress === "function") {
-            try { window.updateScraperProgress(payload); } catch (_) {}
+            try {
+                const res = window.updateScraperProgress(payload);
+                if (res && typeof res.catch === "function") {
+                    res.catch(() => {});
+                }
+            } catch (_) {}
         }
     };
 
@@ -89,35 +94,48 @@
 
 
         let response;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            response = await fetch(
-                url,
-                {
-                    method: "GET",
-
-                    credentials: "same-origin",
-
-                    headers
-                }
-            );
-
-            if (response.status === 429 && attempt < 3) {
-                console.warn(
-                    `HTTP 429 on Page ${page}, waiting ${attempt * 3000}ms before retry ${attempt}/3...`
+        let lastError;
+        for (let attempt = 1; attempt <= 5; attempt++) {
+            try {
+                response = await fetch(
+                    url,
+                    {
+                        method: "GET",
+                        credentials: "same-origin",
+                        headers
+                    }
                 );
-                await sleep(attempt * 3000);
-                continue;
+
+                if (response.status === 429 || response.status >= 500) {
+                    console.warn(
+                        `HTTP ${response.status} on Page ${page}, waiting ${attempt * 3000}ms before retry ${attempt}/5...`
+                    );
+                    if (attempt < 5) {
+                        await sleep(attempt * 3000);
+                        continue;
+                    }
+                }
+
+                if (!response.ok) {
+                    throw new Error(
+                        `HTTP ${response.status} on Page ${page}`
+                    );
+                }
+
+                break;
+            } catch (err) {
+                lastError = err;
+                console.warn(`Network or HTTP error on Myntra page ${page}, attempt ${attempt}/5:`, err);
+                if (attempt < 5) {
+                    await sleep(attempt * 3000);
+                    continue;
+                }
+                throw err;
             }
-            break;
         }
 
-
-        if (!response.ok) {
-
-            throw new Error(
-                `HTTP ${response.status} on Page ${page}`
-            );
-
+        if (!response || !response.ok) {
+            throw lastError || new Error(`Failed to fetch Myntra page ${page} after 5 attempts`);
         }
 
 
