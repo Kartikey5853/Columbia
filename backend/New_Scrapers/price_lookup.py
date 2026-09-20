@@ -142,8 +142,6 @@ def main():
     headers = ["EAN", "SKU"] + sum(([f"{p} Price", f"{p} MRP"] for p in platforms), [])
     summary.append(headers)
     for q in ids:
-        allm = [r for mm in matches[q].values() for r in mm]
-        first = allm[0] if allm else {}
         m = mapped[q][0] if mapped[q] else {}
         row = [m.get("EAN CODE", q if q.isdigit() else ""), m.get("SKU CODE", q if not q.isdigit() else "")]
         for p in platforms:
