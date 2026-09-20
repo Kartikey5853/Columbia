@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 setlocal enabledelayedexpansion
 echo =======================================================
 echo          Columbia 3.0 Application Bundler
@@ -8,7 +8,7 @@ echo.
 set "ROOT_DIR=%~dp0"
 set "FRONTEND_DIR=%ROOT_DIR%frontend"
 set "BACKEND_DIR=%ROOT_DIR%backend"
-set "PYTHON_EXE=%BACKEND_DIR%\env\Scripts\python.exe"
+set "PYTHON_EXE=%ROOT_DIR%\.venv\Scripts\python.exe"
 
 if not exist "%PYTHON_EXE%" (
     echo [ERROR] Python environment not found at: %PYTHON_EXE%
