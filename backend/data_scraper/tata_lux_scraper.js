@@ -17,9 +17,18 @@
     //        ↓
     //   PDP HTML
     //        ↓
-    //   variantOptions / sizeOptions
+    //   Product JSON / Price / variantOptions / sizeOptions
     //        ↓
     //   Final JSON
+    //
+    // PRICE FIX:
+    //   Listing API price
+    //        ↓
+    //   PDP embedded product JSON
+    //        ↓
+    //   JSON-LD
+    //        ↓
+    //   HTML price fallback
     // ============================================================
 
 
@@ -30,20 +39,30 @@
     const SEARCH_TEXT =
         "Columbia:relevance:list:listId_3b2c31cb7dc142898a1f01694ec87d79";
 
+
     const PAGE_SIZE = 24;
 
+
     const LISTING_RETRIES = 3;
+
     const PDP_RETRIES = 3;
+
 
     const CONCURRENCY = 5;
 
+
     const LISTING_DELAY_MIN = 1200;
+
     const LISTING_DELAY_MAX = 2500;
 
+
     const PDP_DELAY_MIN = 800;
+
     const PDP_DELAY_MAX = 1800;
 
+
     const PDP_RETRY_DELAY = 4000;
+
 
 
     // ============================================================
@@ -58,39 +77,80 @@
         "https://luxury.tatacliq.com";
 
 
+
     // ============================================================
     // HELPERS
     // ============================================================
 
     const sleep = ms =>
-        new Promise(resolve => setTimeout(resolve, ms));
+        new Promise(
+            resolve =>
+                setTimeout(
+                    resolve,
+                    ms
+                )
+        );
 
 
-    const randomDelay = (min, max) =>
-        min + Math.floor(Math.random() * (max - min + 1));
+    const randomDelay = (
+        min,
+        max
+    ) =>
+        min +
+        Math.floor(
+            Math.random() *
+            (max - min + 1)
+        );
 
+
+
+    // ============================================================
+    // ABSOLUTE URL
+    // ============================================================
 
     const absoluteUrl = value => {
 
-        if (!value)
+        if (!value) {
             return "";
+        }
 
-        if (value.startsWith("http://"))
+
+        if (
+            value.startsWith("http://")
+        ) {
             return value;
+        }
 
-        if (value.startsWith("https://"))
+
+        if (
+            value.startsWith("https://")
+        ) {
             return value;
+        }
 
-        if (value.startsWith("//"))
+
+        if (
+            value.startsWith("//")
+        ) {
             return "https:" + value;
+        }
 
-        if (value.startsWith("/"))
+
+        if (
+            value.startsWith("/")
+        ) {
             return PDP_BASE + value;
+        }
+
 
         return PDP_BASE + "/" + value;
-
     };
 
+
+
+    // ============================================================
+    // SAFE NUMBER
+    // ============================================================
 
     const safeNumber = value => {
 
@@ -102,15 +162,28 @@
             return 0;
         }
 
-        if (typeof value === "number")
-            return Number.isFinite(value) ? value : 0;
+
+        if (
+            typeof value === "number"
+        ) {
+
+            return Number.isFinite(value)
+                ? value
+                : 0;
+        }
+
 
         const cleaned =
             String(value)
-                .replace(/[^0-9.-]/g, "");
+                .replace(
+                    /[^0-9.-]/g,
+                    ""
+                );
+
 
         const number =
             Number(cleaned);
+
 
         return Number.isFinite(number)
             ? number
@@ -118,66 +191,116 @@
     };
 
 
+
     // ============================================================
     // PROGRESS
     // ============================================================
 
-    const progressStartedAt = Date.now();
+    const progressStartedAt =
+        Date.now();
 
 
-    window.updateProgress = function (progress) {
+    window.updateProgress =
+        function (progress) {
 
-        const current =
-            Number(progress.current || 0);
+            const current =
+                Number(
+                    progress.current || 0
+                );
 
-        const total =
-            Number(progress.total || 0);
 
-        const elapsedSeconds =
-            Math.max(
-                0,
-                (Date.now() - progressStartedAt) / 1000
-            );
+            const total =
+                Number(
+                    progress.total || 0
+                );
 
-        const etaSeconds =
-            current > 0 && total > current
-                ? Math.round(
-                    (elapsedSeconds / current) *
-                    (total - current)
-                )
-                : 0;
 
-        const payload = {
+            const elapsedSeconds =
+                Math.max(
+                    0,
+                    (
+                        Date.now() -
+                        progressStartedAt
+                    ) / 1000
+                );
 
-            ...progress,
 
-            current,
+            const etaSeconds =
+                current > 0 &&
+                total > current
+                    ? Math.round(
+                        (
+                            elapsedSeconds /
+                            current
+                        ) *
+                        (
+                            total -
+                            current
+                        )
+                    )
+                    : 0;
 
-            total,
 
-            elapsed_seconds:
-                Math.round(elapsedSeconds),
+            const payload = {
 
-            eta_seconds:
-                etaSeconds,
+                ...progress,
 
-            updated_at:
-                new Date().toISOString()
+
+                current,
+
+
+                total,
+
+
+                elapsed_seconds:
+                    Math.round(
+                        elapsedSeconds
+                    ),
+
+
+                eta_seconds:
+                    etaSeconds,
+
+
+                updated_at:
+                    new Date()
+                        .toISOString()
+            };
+
+
+            window.__SCRAPER_PROGRESS__ =
+                payload;
+
+
+            if (
+                typeof window.updateScraperProgress ===
+                "function"
+            ) {
+
+                try {
+
+                    const res =
+                        window.updateScraperProgress(
+                            payload
+                        );
+
+
+                    if (
+                        res &&
+                        typeof res.catch ===
+                        "function"
+                    ) {
+
+                        res.catch(
+                            () => {}
+                        );
+                    }
+
+                }
+                catch (_) {}
+            }
         };
 
-
-        window.__SCRAPER_PROGRESS__ =
-            payload;
-
-        if (typeof window.updateScraperProgress === "function") {
-            try {
-                const res = window.updateScraperProgress(payload);
-                if (res && typeof res.catch === "function") {
-                    res.catch(() => {});
-                }
-            } catch (_) {}
-        }
-    };
 
 
     // ============================================================
@@ -190,52 +313,70 @@
             new URLSearchParams({
 
                 pageSize:
-                    String(PAGE_SIZE),
+                    String(
+                        PAGE_SIZE
+                    ),
+
 
                 isTextSearch:
                     "false",
 
+
                 isFilter:
                     "false",
+
 
                 isPwa:
                     "true",
 
+
                 channel:
                     "web",
+
 
                 typeID:
                     "all",
 
+
                 page:
                     String(page),
+
 
                 searchText:
                     SEARCH_TEXT,
 
+
                 isSortFlow:
                     "false",
+
 
                 isSuggested:
                     "false",
 
+
                 isMDE:
                     "true",
+
 
                 test:
                     "es.template.binning.qpsv4",
 
+
                 qc:
                     "false",
+
 
                 isKeywordRedirect:
                     "false",
 
+
                 isKeywordRedirectEnabled:
                     "false",
 
+
                 isFilterDataRequired:
                     "false",
+
 
                 ad:
                     "true"
@@ -243,8 +384,11 @@
             });
 
 
-        return `${LISTING_BASE}?${params}`;
+        return (
+            `${LISTING_BASE}?${params}`
+        );
     }
+
 
 
     // ============================================================
@@ -254,41 +398,54 @@
     async function fetchListingPage(page) {
 
         const url =
-            buildListingUrl(page);
+            buildListingUrl(
+                page
+            );
 
 
         const response =
-            await fetch(url, {
+            await fetch(
+                url,
+                {
 
-                method: "GET",
+                    method:
+                        "GET",
 
-                credentials: "omit",
 
-                headers: {
+                    credentials:
+                        "omit",
 
-                    "appplatform":
-                        "web",
 
-                    "appversion":
-                        "v1",
+                    headers: {
 
-                    "x-provider-id":
-                        "cliq-search",
+                        "appplatform":
+                            "web",
 
-                    "Accept":
-                        "application/json"
+
+                        "appversion":
+                            "v1",
+
+
+                        "x-provider-id":
+                            "cliq-search",
+
+
+                        "Accept":
+                            "application/json"
+
+                    }
 
                 }
+            );
 
-            });
 
-
-        if (!response.ok) {
+        if (
+            !response.ok
+        ) {
 
             throw new Error(
                 `Listing HTTP ${response.status}`
             );
-
         }
 
 
@@ -298,22 +455,27 @@
 
         if (
             data?.status &&
-            String(data.status).toLowerCase() !== "success"
+            String(
+                data.status
+            ).toLowerCase() !==
+            "success"
         ) {
 
             throw new Error(
                 `Listing API status: ${data.status}`
             );
-
         }
 
 
-        if (!Array.isArray(data.searchresult)) {
+        if (
+            !Array.isArray(
+                data.searchresult
+            )
+        ) {
 
             throw new Error(
                 "Listing response contains no searchresult array"
             );
-
         }
 
 
@@ -321,11 +483,14 @@
     }
 
 
+
     // ============================================================
     // FETCH LISTING PAGE WITH RETRIES
     // ============================================================
 
-    async function fetchListingWithRetry(page) {
+    async function fetchListingWithRetry(
+        page
+    ) {
 
         let lastError =
             null;
@@ -345,12 +510,16 @@
 
 
                 const data =
-                    await fetchListingPage(page);
+                    await fetchListingPage(
+                        page
+                    );
 
 
                 return data;
 
             }
+
+
             catch (error) {
 
                 lastError =
@@ -371,20 +540,19 @@
                     await sleep(
                         PDP_RETRY_DELAY
                     );
-
                 }
-
             }
-
         }
 
 
-        throw lastError ||
+        throw (
+            lastError ||
             new Error(
                 `Listing page ${page + 1} failed`
-            );
-
+            )
+        );
     }
+
 
 
     // ============================================================
@@ -398,30 +566,41 @@
             source:
                 "tatacliq",
 
+
             product_id:
                 String(
-                    p?.productId || ""
+                    p?.productId ||
+                    ""
                 ),
+
 
             sku:
                 "",
 
+
             ean:
                 "",
+
 
             available:
                 !!p?.inStockFlag,
 
+
             title:
-                p?.productname || "",
+                p?.productname ||
+                "",
+
 
             brand:
-                p?.brandname || "",
+                p?.brandname ||
+                "",
+
 
             price:
                 safeNumber(
                     p?.price?.sellingPrice
                 ),
+
 
             mrp:
                 safeNumber(
@@ -431,39 +610,57 @@
                     p?.price?.sellingPrice
                 ),
 
+
+            // This tells us whether the initial
+            // listing API supplied a price.
+            price_source:
+                safeNumber(
+                    p?.price?.sellingPrice
+                ) > 0
+                    ? "listing"
+                    : "unavailable",
+
+
             image_url:
                 absoluteUrl(
-                    p?.imageURL || ""
+                    p?.imageURL ||
+                    ""
                 ),
+
 
             url:
                 absoluteUrl(
-                    p?.webURL || ""
+                    p?.webURL ||
+                    ""
                 ),
+
 
             variants:
                 [],
 
+
             scraped_at:
-                new Date().toISOString()
+                new Date()
+                    .toISOString()
 
         };
-
     }
+
 
 
     // ============================================================
     // PDP URL
     // ============================================================
 
-    function buildPdpUrl(product) {
+    function buildPdpUrl(
+        product
+    ) {
 
         if (
             product?.url
         ) {
 
             return product.url;
-
         }
 
 
@@ -471,24 +668,31 @@
             product?.product_id
         ) {
 
-            return `${PDP_BASE}/p-${product.product_id.toLowerCase()}`;
-
+            return (
+                `${PDP_BASE}/p-` +
+                product.product_id
+                    .toLowerCase()
+            );
         }
 
 
         return "";
-
     }
+
 
 
     // ============================================================
     // FETCH PDP HTML
     // ============================================================
 
-    async function fetchPdpHtml(product) {
+    async function fetchPdpHtml(
+        product
+    ) {
 
         const url =
-            buildPdpUrl(product);
+            buildPdpUrl(
+                product
+            );
 
 
         if (!url) {
@@ -496,33 +700,40 @@
             throw new Error(
                 "No PDP URL"
             );
-
         }
 
 
         const response =
-            await fetch(url, {
+            await fetch(
+                url,
+                {
 
-                method: "GET",
+                    method:
+                        "GET",
 
-                credentials: "omit",
 
-                headers: {
+                    credentials:
+                        "omit",
 
-                    "Accept":
-                        "text/html,application/xhtml+xml"
+
+                    headers: {
+
+                        "Accept":
+                            "text/html,application/xhtml+xml"
+
+                    }
 
                 }
+            );
 
-            });
 
-
-        if (!response.ok) {
+        if (
+            !response.ok
+        ) {
 
             throw new Error(
                 `PDP HTTP ${response.status}`
             );
-
         }
 
 
@@ -530,37 +741,44 @@
             await response.text();
 
 
-        if (!html || html.length < 1000) {
+        if (
+            !html ||
+            html.length < 1000
+        ) {
 
             throw new Error(
                 `PDP HTML too small: ${html.length}`
             );
-
         }
 
 
         return html;
-
     }
+
 
 
     // ============================================================
     // EXTRACT JSON OBJECT FROM HTML
     //
-    // Tata Lux embeds the product object directly into the PDP
-    // HTML. We locate "variantOptions" and walk backwards/
-    // forwards through the JSON text rather than depending on
-    // a particular script tag or webpack variable name.
+    // Tata Lux embeds the product object directly into
+    // the PDP HTML.
+    //
+    // We locate "variantOptions" and walk backwards/
+    // forwards through the JSON text.
     // ============================================================
 
-    function extractJsonContainingVariantOptions(html) {
+    function extractJsonContainingVariantOptions(
+        html
+    ) {
 
         const key =
             '"variantOptions"';
 
 
         const variantIndex =
-            html.indexOf(key);
+            html.indexOf(
+                key
+            );
 
 
         if (
@@ -568,16 +786,8 @@
         ) {
 
             return null;
-
         }
 
-
-        /*
-         * Find candidate JSON object starts before variantOptions.
-         *
-         * We try progressively farther backwards because the exact
-         * surrounding HTML structure can change.
-         */
 
         const MAX_BACKTRACK =
             200000;
@@ -586,26 +796,15 @@
         const startLimit =
             Math.max(
                 0,
-                variantIndex - MAX_BACKTRACK
+                variantIndex -
+                MAX_BACKTRACK
             );
 
 
         let depth = 0;
 
-        let inString = false;
-
-        let escaped = false;
-
         let objectStart = -1;
 
-
-        /*
-         * Scan backwards looking for a { that can contain the
-         * variantOptions property.
-         *
-         * This is deliberately conservative. Once a possible {
-         * is found, we use the forward balanced parser below.
-         */
 
         for (
             let i = variantIndex;
@@ -624,7 +823,6 @@
                 depth++;
 
                 continue;
-
             }
 
 
@@ -639,7 +837,6 @@
                     depth--;
 
                     continue;
-
                 }
 
 
@@ -647,20 +844,12 @@
                     i;
 
                 break;
-
             }
-
         }
 
 
-        /*
-         * The simple reverse-depth search above can fail when the
-         * preceding content contains strings/braces. Therefore we
-         * also try several nearby { positions using a balanced
-         * forward parser.
-         */
-
-        const candidateStarts = [];
+        const candidateStarts =
+            [];
 
 
         if (
@@ -670,14 +859,16 @@
             candidateStarts.push(
                 objectStart
             );
-
         }
 
 
         for (
-            let i = variantIndex - 1;
+            let i =
+                variantIndex - 1;
+
             i >= startLimit &&
             candidateStarts.length < 100;
+
             i--
         ) {
 
@@ -685,15 +876,16 @@
                 html[i] === "{"
             ) {
 
-                candidateStarts.push(i);
-
+                candidateStarts.push(
+                    i
+                );
             }
-
         }
 
 
         for (
-            const start of candidateStarts
+            const start
+            of candidateStarts
         ) {
 
             let depthCount = 0;
@@ -713,15 +905,18 @@
                     html[i];
 
 
-                if (stringMode) {
+                if (
+                    stringMode
+                ) {
 
-                    if (escapeMode) {
+                    if (
+                        escapeMode
+                    ) {
 
                         escapeMode =
                             false;
 
                         continue;
-
                     }
 
 
@@ -733,7 +928,6 @@
                             true;
 
                         continue;
-
                     }
 
 
@@ -743,12 +937,10 @@
 
                         stringMode =
                             false;
-
                     }
 
 
                     continue;
-
                 }
 
 
@@ -760,7 +952,6 @@
                         true;
 
                     continue;
-
                 }
 
 
@@ -769,8 +960,9 @@
                 ) {
 
                     depthCount++;
-
                 }
+
+
                 else if (
                     char === "}"
                 ) {
@@ -809,51 +1001,45 @@
                                 ) {
 
                                     return parsed;
-
                                 }
 
                             }
                             catch (_) {
 
-                                // Keep trying other candidates.
-
+                                // Keep trying.
                             }
-
                         }
 
 
                         break;
-
                     }
-
                 }
-
             }
-
         }
 
 
         return null;
-
     }
+
 
 
     // ============================================================
     // GENERIC FALLBACK:
     // FIND VARIANT ARRAYS DIRECTLY
-    //
-    // This exists because the PDP HTML structure can change while
-    // the actual variantOptions structure remains stable.
     // ============================================================
 
-    function extractVariantOptionsFallback(html) {
+    function extractVariantOptionsFallback(
+        html
+    ) {
 
         const marker =
             '"variantOptions":[';
 
 
         const index =
-            html.indexOf(marker);
+            html.indexOf(
+                marker
+            );
 
 
         if (
@@ -861,7 +1047,6 @@
         ) {
 
             return [];
-
         }
 
 
@@ -870,14 +1055,11 @@
             '"variantOptions":'.length;
 
 
-        let depth =
-            0;
+        let depth = 0;
 
-        let inString =
-            false;
+        let inString = false;
 
-        let escaped =
-            false;
+        let escaped = false;
 
 
         for (
@@ -890,14 +1072,20 @@
                 html[i];
 
 
-            if (inString) {
+            if (
+                inString
+            ) {
 
-                if (escaped) {
+                if (
+                    escaped
+                ) {
 
                     escaped =
                         false;
 
                 }
+
+
                 else if (
                     char === "\\"
                 ) {
@@ -906,17 +1094,18 @@
                         true;
 
                 }
+
+
                 else if (
                     char === '"'
                 ) {
 
                     inString =
                         false;
-
                 }
 
-                continue;
 
+                continue;
             }
 
 
@@ -928,7 +1117,6 @@
                     true;
 
                 continue;
-
             }
 
 
@@ -939,6 +1127,8 @@
                 depth++;
 
             }
+
+
             else if (
                 char === "]"
             ) {
@@ -967,26 +1157,679 @@
                     catch (_) {
 
                         return [];
-
                     }
-
                 }
-
             }
-
         }
 
 
         return [];
-
     }
+
+        // ============================================================
+    // PRICE EXTRACTION
+    //
+    // Tata CLiQ Luxury may expose price in the PDP HTML/app state
+    // instead of the listing API.
+    //
+    // Priority:
+    //
+    //   1. Embedded product JSON
+    //   2. JSON-LD
+    //   3. Direct HTML price fields
+    // ============================================================
+
+
+    function firstPositiveNumber(
+        ...values
+    ) {
+
+        for (
+            const value
+            of values
+        ) {
+
+            const n =
+                safeNumber(
+                    value
+                );
+
+
+            if (
+                n > 0
+            ) {
+
+                return n;
+            }
+        }
+
+
+        return 0;
+    }
+
+
+
+    // ============================================================
+    // EXTRACT PRICE FROM OBJECT
+    // ============================================================
+
+    function extractPriceFromObject(
+        root
+    ) {
+
+        if (
+            !root ||
+            typeof root !== "object"
+        ) {
+
+            return {
+
+                price: 0,
+
+                mrp: 0
+
+            };
+        }
+
+
+        let price = 0;
+
+        let mrp = 0;
+
+
+        const visited =
+            new Set();
+
+
+
+        // --------------------------------------------------------
+        // POSSIBLE SELLING PRICE KEYS
+        // --------------------------------------------------------
+
+        const priceKeys = [
+
+            "sellingPrice",
+
+            "salePrice",
+
+            "discountedPrice",
+
+            "offerPrice",
+
+            "finalPrice",
+
+            "currentPrice",
+
+            "selling_price",
+
+            "sale_price",
+
+            "discounted_price",
+
+            "offer_price",
+
+            "final_price",
+
+            "current_price"
+
+        ];
+
+
+
+        // --------------------------------------------------------
+        // POSSIBLE MRP KEYS
+        // --------------------------------------------------------
+
+        const mrpKeys = [
+
+            "mrpPrice",
+
+            "mrp",
+
+            "listPrice",
+
+            "originalPrice",
+
+            "maximumRetailPrice",
+
+            "mrp_price",
+
+            "list_price",
+
+            "original_price"
+
+        ];
+
+
+
+        // --------------------------------------------------------
+        // RECURSIVE WALK
+        // --------------------------------------------------------
+
+        function walk(
+            node
+        ) {
+
+            if (
+                !node ||
+                typeof node !== "object" ||
+                visited.has(node)
+            ) {
+
+                return;
+            }
+
+
+            visited.add(
+                node
+            );
+
+
+
+            // ----------------------------------------------------
+            // ARRAY
+            // ----------------------------------------------------
+
+            if (
+                Array.isArray(node)
+            ) {
+
+                for (
+                    const item
+                    of node
+                ) {
+
+                    walk(
+                        item
+                    );
+                }
+
+
+                return;
+            }
+
+
+
+            // ----------------------------------------------------
+            // SELLING PRICE
+            // ----------------------------------------------------
+
+            for (
+                const key
+                of priceKeys
+            ) {
+
+                if (
+                    price === 0 &&
+                    Object.prototype.hasOwnProperty.call(
+                        node,
+                        key
+                    )
+                ) {
+
+                    price =
+                        firstPositiveNumber(
+                            node[key]
+                        );
+                }
+            }
+
+
+
+            // ----------------------------------------------------
+            // MRP
+            // ----------------------------------------------------
+
+            for (
+                const key
+                of mrpKeys
+            ) {
+
+                if (
+                    mrp === 0 &&
+                    Object.prototype.hasOwnProperty.call(
+                        node,
+                        key
+                    )
+                ) {
+
+                    mrp =
+                        firstPositiveNumber(
+                            node[key]
+                        );
+                }
+            }
+
+
+
+            // ----------------------------------------------------
+            // NESTED PRICE OBJECT
+            //
+            // Example:
+            //
+            // price: {
+            //     sellingPrice: 4999,
+            //     mrpPrice: 6999
+            // }
+            // ----------------------------------------------------
+
+            const nestedPrice =
+                node.price;
+
+
+            if (
+                nestedPrice &&
+                typeof nestedPrice ===
+                "object"
+            ) {
+
+                if (
+                    price === 0
+                ) {
+
+                    price =
+                        firstPositiveNumber(
+
+                            nestedPrice.sellingPrice,
+
+                            nestedPrice.salePrice,
+
+                            nestedPrice.discountedPrice,
+
+                            nestedPrice.offerPrice,
+
+                            nestedPrice.finalPrice,
+
+                            nestedPrice.currentPrice,
+
+                            nestedPrice.value
+                        );
+                }
+
+
+                if (
+                    mrp === 0
+                ) {
+
+                    mrp =
+                        firstPositiveNumber(
+
+                            nestedPrice.mrpPrice,
+
+                            nestedPrice.mrp,
+
+                            nestedPrice.listPrice,
+
+                            nestedPrice.originalPrice,
+
+                            nestedPrice.maximumRetailPrice
+                        );
+                }
+            }
+
+
+
+            // ----------------------------------------------------
+            // RECURSE THROUGH ALL OBJECTS
+            // ----------------------------------------------------
+
+            for (
+                const [key, value]
+                of Object.entries(node)
+            ) {
+
+                if (
+                    key === "price"
+                ) {
+
+                    continue;
+                }
+
+
+                if (
+                    value &&
+                    typeof value ===
+                    "object"
+                ) {
+
+                    walk(
+                        value
+                    );
+                }
+            }
+        }
+
+
+
+        walk(
+            root
+        );
+
+
+
+        // --------------------------------------------------------
+        // FALLBACKS
+        // --------------------------------------------------------
+
+        if (
+            price === 0 &&
+            mrp > 0
+        ) {
+
+            price =
+                mrp;
+        }
+
+
+        if (
+            mrp === 0 &&
+            price > 0
+        ) {
+
+            mrp =
+                price;
+        }
+
+
+
+        return {
+
+            price,
+
+            mrp
+
+        };
+    }
+
+
+
+    // ============================================================
+    // EXTRACT PRICE FROM PDP HTML
+    // ============================================================
+
+    function extractPriceFromHtml(
+        html,
+        productObject
+    ) {
+
+
+        // ========================================================
+        // METHOD 1
+        // EMBEDDED PRODUCT OBJECT
+        // ========================================================
+
+        const fromObject =
+            extractPriceFromObject(
+                productObject
+            );
+
+
+        if (
+            fromObject.price > 0
+        ) {
+
+            console.log(
+                "[PRICE] Found in embedded PDP object:",
+                fromObject
+            );
+
+
+            return fromObject;
+        }
+
+
+
+        // ========================================================
+        // METHOD 2
+        // JSON-LD
+        // ========================================================
+
+        try {
+
+            const blocks =
+                html.match(
+                    /<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi
+                ) || [];
+
+
+            for (
+                const block
+                of blocks
+            ) {
+
+                const raw =
+                    block
+                        .replace(
+                            /^.*?>/,
+                            ""
+                        )
+                        .replace(
+                            /<\/script>\s*$/i,
+                            ""
+                        )
+                        .trim();
+
+
+                try {
+
+                    const parsed =
+                        JSON.parse(
+                            raw
+                        );
+
+
+                    const nodes =
+                        Array.isArray(
+                            parsed
+                        )
+                            ? parsed
+                            : [parsed];
+
+
+                    for (
+                        const node
+                        of nodes
+                    ) {
+
+                        if (
+                            !node
+                        ) {
+
+                            continue;
+                        }
+
+
+                        const offers =
+                            Array.isArray(
+                                node?.offers
+                            )
+                                ? node.offers
+                                : [
+                                    node?.offers
+                                ];
+
+
+                        for (
+                            const offer
+                            of offers
+                        ) {
+
+                            if (
+                                !offer
+                            ) {
+
+                                continue;
+                            }
+
+
+                            const offerPrice =
+                                firstPositiveNumber(
+
+                                    offer.price,
+
+                                    offer.lowPrice
+                                );
+
+
+                            if (
+                                offerPrice > 0
+                            ) {
+
+                                const result = {
+
+                                    price:
+                                        offerPrice,
+
+
+                                    mrp:
+                                        firstPositiveNumber(
+
+                                            offer.highPrice,
+
+                                            offer.price
+                                        )
+
+                                };
+
+
+                                console.log(
+                                    "[PRICE] Found in JSON-LD:",
+                                    result
+                                );
+
+
+                                return result;
+                            }
+                        }
+                    }
+
+                }
+                catch (_) {
+
+                    // Ignore malformed JSON-LD.
+                }
+            }
+
+        }
+        catch (_) {
+
+            // Ignore JSON-LD extraction errors.
+        }
+
+
+
+        // ========================================================
+        // METHOD 3
+        // DIRECT HTML FALLBACK
+        // ========================================================
+
+        let price = 0;
+
+        let mrp = 0;
+
+
+
+        // --------------------------------------------------------
+        // SELLING PRICE
+        // --------------------------------------------------------
+
+        const priceMatch =
+            html.match(
+
+                /"(?:sellingPrice|salePrice|discountedPrice|offerPrice|finalPrice|currentPrice)"\s*:\s*"?([0-9]+(?:\.[0-9]+)?)"?/i
+
+            );
+
+
+
+        // --------------------------------------------------------
+        // MRP
+        // --------------------------------------------------------
+
+        const mrpMatch =
+            html.match(
+
+                /"(?:mrpPrice|mrp|listPrice|originalPrice)"\s*:\s*"?([0-9]+(?:\.[0-9]+)?)"?/i
+
+            );
+
+
+
+        if (
+            priceMatch
+        ) {
+
+            price =
+                safeNumber(
+                    priceMatch[1]
+                );
+        }
+
+
+        if (
+            mrpMatch
+        ) {
+
+            mrp =
+                safeNumber(
+                    mrpMatch[1]
+                );
+        }
+
+
+
+        // --------------------------------------------------------
+        // FINAL FALLBACKS
+        // --------------------------------------------------------
+
+        if (
+            price === 0 &&
+            mrp > 0
+        ) {
+
+            price =
+                mrp;
+        }
+
+
+        if (
+            mrp === 0 &&
+            price > 0
+        ) {
+
+            mrp =
+                price;
+        }
+
+
+
+        const result = {
+
+            price,
+
+            mrp
+
+        };
+
+
+        console.log(
+            "[PRICE] HTML fallback:",
+            result
+        );
+
+
+        return result;
+    }
+
 
 
     // ============================================================
     // PARSE VARIANTS
     // ============================================================
 
-    function parseVariants(html) {
+    function parseVariants(
+        html
+    ) {
 
         /*
          * Preferred:
@@ -1011,8 +1854,8 @@
 
             rawVariants =
                 productObject.variantOptions;
-
         }
+
 
 
         /*
@@ -1028,12 +1871,13 @@
                 extractVariantOptionsFallback(
                     html
                 );
-
         }
 
 
+
         /*
-         * If variantOptions isn't available, use variantGroup.
+         * If variantOptions isn't available,
+         * use variantGroup.
          */
 
         if (
@@ -1043,7 +1887,8 @@
             )
         ) {
 
-            const flattened = [];
+            const flattened =
+                [];
 
 
             for (
@@ -1067,29 +1912,30 @@
                     flattened.push({
 
                         colorlink:
-                            group.colorLink || {},
+                            group.colorLink ||
+                            {},
+
 
                         sizelink:
                             size
 
                     });
-
                 }
-
             }
 
 
             rawVariants =
                 flattened;
-
         }
+
 
 
         /*
          * Normalize variants.
          */
 
-        const variants = [];
+        const variants =
+            [];
 
 
         for (
@@ -1142,37 +1988,42 @@
             ) {
 
                 continue;
-
             }
 
 
             variants.push({
 
                 size:
-                    String(size),
+                    String(
+                        size
+                    ),
+
 
                 sku:
-
                     sku,
+
 
                 available:
                     !!sizeLink?.isAvailable,
+
 
                 stock:
                     safeNumber(
                         sizeLink?.stockCount
                     ),
 
+
                 url:
                     url
 
             });
-
         }
 
 
+
         /*
-         * Deduplicate variants by SKU first, then URL/size.
+         * Deduplicate variants by SKU first,
+         * then URL/size.
          */
 
         const seen =
@@ -1192,25 +2043,27 @@
                 ) {
 
                     return false;
-
                 }
 
 
-                seen.add(key);
+                seen.add(
+                    key
+                );
+
 
                 return true;
 
             }
         );
-
     }
 
-
-    // ============================================================
+        // ============================================================
     // FETCH + PARSE ONE PDP
     // ============================================================
 
-    async function scrapePdp(product) {
+    async function scrapePdp(
+        product
+    ) {
 
         let lastError =
             null;
@@ -1224,17 +2077,48 @@
 
             try {
 
+                // ------------------------------------------------
+                // FETCH PDP
+                // ------------------------------------------------
+
                 const html =
                     await fetchPdpHtml(
                         product
                     );
 
 
+
+                // ------------------------------------------------
+                // EXTRACT EMBEDDED PRODUCT OBJECT
+                //
+                // This same object is used for:
+                //
+                //   - variants
+                //   - price
+                //   - MRP
+                // ------------------------------------------------
+
+                const productObject =
+                    extractJsonContainingVariantOptions(
+                        html
+                    );
+
+
+
+                // ------------------------------------------------
+                // PARSE VARIANTS
+                // ------------------------------------------------
+
                 const variants =
                     parseVariants(
                         html
                     );
 
+
+
+                // ------------------------------------------------
+                // VARIANT VALIDATION
+                // ------------------------------------------------
 
                 if (
                     variants.length === 0
@@ -1244,8 +2128,6 @@
                      * Don't immediately call this a hard failure.
                      *
                      * Some products genuinely have no size variants.
-                     * But we check whether the HTML actually contains
-                     * variant markers before deciding.
                      */
 
                     const hasVariantMarkers =
@@ -1267,15 +2149,46 @@
                         throw new Error(
                             "Variant data found but could not be parsed"
                         );
-
                     }
-
                 }
 
+
+
+                // ------------------------------------------------
+                // PRICE EXTRACTION
+                // ------------------------------------------------
+
+                const priceData =
+                    extractPriceFromHtml(
+                        html,
+                        productObject
+                    );
+
+
+                console.log(
+                    `[PRICE] ${product.product_id} | ` +
+                    `Price: ${priceData.price} | ` +
+                    `MRP: ${priceData.mrp}`
+                );
+
+
+
+                // ------------------------------------------------
+                // RETURN PDP DATA
+                // ------------------------------------------------
 
                 return {
 
                     variants,
+
+
+                    price:
+                        priceData.price,
+
+
+                    mrp:
+                        priceData.mrp,
+
 
                     htmlLength:
                         html.length
@@ -1283,6 +2196,8 @@
                 };
 
             }
+
+
             catch (error) {
 
                 lastError =
@@ -1303,37 +2218,44 @@
                     await sleep(
                         PDP_RETRY_DELAY
                     );
-
                 }
-
             }
-
         }
 
 
-        throw lastError ||
+        throw (
+            lastError ||
             new Error(
                 "PDP scraping failed"
-            );
-
+            )
+        );
     }
+
 
 
     // ============================================================
     // STORAGE
     // ============================================================
 
-    const products = [];
+    const products =
+        [];
+
 
     const productIds =
         new Set();
 
 
-    let listingFailedPages = [];
+    let listingFailedPages =
+        [];
 
-    let failedPdpProducts = [];
 
-    let totalVariants = 0;
+    let failedPdpProducts =
+        [];
+
+
+    let totalVariants =
+        0;
+
 
 
     // ============================================================
@@ -1342,17 +2264,59 @@
 
     console.clear();
 
+
     console.log("");
-    console.log("==============================================");
-    console.log(" TATA CLIQ LUXURY - COLUMBIA SCRAPER");
-    console.log("==============================================");
+
+
+    console.log(
+        "=============================================="
+    );
+
+
+    console.log(
+        " TATA CLIQ LUXURY - COLUMBIA SCRAPER"
+    );
+
+
+    console.log(
+        "=============================================="
+    );
+
+
     console.log("");
-    console.log("Listing API : Lux Search");
-    console.log("PDP source  : PDP HTML");
-    console.log("Concurrency : " + CONCURRENCY);
+
+
+    console.log(
+        "Listing API : Lux Search"
+    );
+
+
+    console.log(
+        "PDP source  : PDP HTML"
+    );
+
+
+    console.log(
+        "Price       : PDP + JSON-LD + HTML fallback"
+    );
+
+
+    console.log(
+        "Concurrency : " +
+        CONCURRENCY
+    );
+
+
     console.log("");
-    console.log("Starting...");
+
+
+    console.log(
+        "Starting..."
+    );
+
+
     console.log("");
+
 
 
     // ============================================================
@@ -1370,6 +2334,8 @@
             );
 
     }
+
+
     catch (error) {
 
         console.error(
@@ -1377,24 +2343,32 @@
             error
         );
 
-        return;
 
+        return;
     }
 
 
+
+    // ============================================================
+    // PAGINATION
+    // ============================================================
+
     const pagination =
-        first.pagination || {};
+        first.pagination ||
+        {};
 
 
     const totalPages =
         Number(
-            pagination.totalPages || 0
+            pagination.totalPages ||
+            0
         );
 
 
     const totalResults =
         Number(
-            pagination.totalResults || 0
+            pagination.totalResults ||
+            0
         );
 
 
@@ -1411,23 +2385,27 @@
             "FATAL: API returned no pages."
         );
 
-        return;
 
+        return;
     }
 
 
+
     // ============================================================
-    // PROCESS FIRST PAGE
+    // ADD LISTING PRODUCTS
     // ============================================================
 
-    function addListingProducts(items) {
+    function addListingProducts(
+        items
+    ) {
 
         if (
-            !Array.isArray(items)
+            !Array.isArray(
+                items
+            )
         ) {
 
             return;
-
         }
 
 
@@ -1447,7 +2425,6 @@
             ) {
 
                 continue;
-
             }
 
 
@@ -1458,7 +2435,6 @@
             ) {
 
                 continue;
-
             }
 
 
@@ -1470,11 +2446,14 @@
             products.push(
                 product
             );
-
         }
-
     }
 
+
+
+    // ============================================================
+    // PROCESS FIRST PAGE
+    // ============================================================
 
     addListingProducts(
         first.searchresult
@@ -1486,11 +2465,14 @@
         stage:
             "Collecting Products",
 
+
         current:
             1,
 
+
         total:
             totalPages,
+
 
         products:
             products.length
@@ -1501,6 +2483,7 @@
     console.log(
         `Page 1/${totalPages} | Products: ${products.length}`
     );
+
 
 
     // ============================================================
@@ -1536,11 +2519,14 @@
                 stage:
                     "Collecting Products",
 
+
                 current:
                     page + 1,
 
+
                 total:
                     totalPages,
+
 
                 products:
                     products.length
@@ -1548,6 +2534,8 @@
             });
 
         }
+
+
         catch (error) {
 
             console.error(
@@ -1559,9 +2547,13 @@
             listingFailedPages.push(
                 page
             );
-
         }
 
+
+
+        // --------------------------------------------------------
+        // DELAY BETWEEN LISTING REQUESTS
+        // --------------------------------------------------------
 
         await sleep(
             randomDelay(
@@ -1569,8 +2561,8 @@
                 LISTING_DELAY_MAX
             )
         );
-
     }
+
 
 
     // ============================================================
@@ -1578,23 +2570,56 @@
     // ============================================================
 
     console.log("");
-    console.log("----------------------------------------------");
-    console.log("LISTING COLLECTION COMPLETE");
-    console.log("----------------------------------------------");
+
+
+    console.log(
+        "----------------------------------------------"
+    );
+
+
+    console.log(
+        "LISTING COLLECTION COMPLETE"
+    );
+
+
+    console.log(
+        "----------------------------------------------"
+    );
+
+
     console.log(
         `Expected products : ${totalResults}`
     );
+
+
     console.log(
         `Collected products: ${products.length}`
     );
+
+
     console.log(
-        `Missing products  : ${Math.max(0, totalResults - products.length)}`
+        `Missing products  : ${
+            Math.max(
+                0,
+                totalResults -
+                products.length
+            )
+        }`
     );
+
+
     console.log(
         `Failed pages      : ${listingFailedPages.length}`
     );
-    console.log("----------------------------------------------");
+
+
+    console.log(
+        "----------------------------------------------"
+    );
+
+
     console.log("");
+
 
 
     if (
@@ -1604,24 +2629,32 @@
         console.warn(
             "Failed listing pages:",
             listingFailedPages.map(
-                p => p + 1
+                p =>
+                    p + 1
             )
         );
-
     }
 
-
-    // ============================================================
+        // ============================================================
     // PDP WORKERS
     // ============================================================
 
-    let nextIndex = 0;
+    let nextIndex =
+        0;
+
 
     let completed =
         0;
 
 
-    async function worker(workerId) {
+
+    // ============================================================
+    // WORKER
+    // ============================================================
+
+    async function worker(
+        workerId
+    ) {
 
         while (true) {
 
@@ -1634,7 +2667,6 @@
             ) {
 
                 break;
-
             }
 
 
@@ -1644,41 +2676,141 @@
 
             try {
 
+                // ------------------------------------------------
+                // SCRAPE PDP
+                // ------------------------------------------------
+
                 const result =
                     await scrapePdp(
                         product
                     );
 
 
+
+                // ------------------------------------------------
+                // VARIANTS
+                // ------------------------------------------------
+
                 product.variants =
                     result.variants;
 
 
+
+                // ------------------------------------------------
+                // PRICE
+                //
+                // IMPORTANT:
+                //
+                // PDP price takes priority.
+                //
+                // If PDP price is unavailable,
+                // the original listing API price
+                // is preserved.
+                // ------------------------------------------------
+
+                if (
+                    result.price > 0
+                ) {
+
+                    product.price =
+                        result.price;
+                }
+
+
+
+                // ------------------------------------------------
+                // MRP
+                // ------------------------------------------------
+
+                if (
+                    result.mrp > 0
+                ) {
+
+                    product.mrp =
+                        result.mrp;
+                }
+
+
+
+                // ------------------------------------------------
+                // PRICE SOURCE
+                // ------------------------------------------------
+
+                product.price_source =
+                    result.price > 0
+                        ? "pdp"
+                        : (
+                            product.price > 0
+                                ? "listing"
+                                : "unavailable"
+                        );
+
+
+
+                // ------------------------------------------------
+                // PDP HTML SIZE
+                // ------------------------------------------------
+
                 product.pdp_html_length =
                     result.htmlLength;
 
-
-                totalVariants +=
-                    result.variants.length;
-
             }
+
+
             catch (error) {
+
+                // ------------------------------------------------
+                // PDP FAILED
+                // ------------------------------------------------
 
                 product.variants =
                     [];
+
 
                 product.variant_error =
                     error.message;
 
 
+                /*
+                 * IMPORTANT:
+                 *
+                 * We do NOT delete the listing price.
+                 *
+                 * If the listing API had a price,
+                 * it remains available.
+                 */
+
+                if (
+                    product.price > 0
+                ) {
+
+                    product.price_source =
+                        "listing";
+
+                }
+                else {
+
+                    product.price_source =
+                        "unavailable";
+                }
+
+
                 failedPdpProducts.push(
                     product.product_id
                 );
-
             }
 
 
+
+            // ----------------------------------------------------
+            // PROGRESS
+            // ----------------------------------------------------
+
             completed++;
+
+
+            totalVariants +=
+                product.variants.length;
 
 
             const average =
@@ -1689,19 +2821,24 @@
                 );
 
 
+
             updateProgress({
 
                 stage:
                     "Collecting Variants",
 
+
                 current:
                     completed,
+
 
                 total:
                     products.length,
 
+
                 total_variants:
                     totalVariants,
+
 
                 failed_products:
                     failedPdpProducts.length
@@ -1709,16 +2846,40 @@
             });
 
 
+
+            // ----------------------------------------------------
+            // LOG
+            // ----------------------------------------------------
+
             console.log(
+
                 `[Worker ${workerId}] ` +
+
                 `${completed}/${products.length}` +
+
                 ` | ${product.product_id}` +
+
+                ` | Price: ${product.price || 0}` +
+
+                ` | MRP: ${product.mrp || 0}` +
+
+                ` | Source: ${product.price_source}` +
+
                 ` | Variants: ${product.variants.length}` +
+
                 ` | Total: ${totalVariants}` +
+
                 ` | Avg: ${average.toFixed(2)}` +
+
                 ` | Failed: ${failedPdpProducts.length}`
+
             );
 
+
+
+            // ----------------------------------------------------
+            // CHECKPOINT
+            // ----------------------------------------------------
 
             if (
                 completed % 100 === 0 ||
@@ -1726,24 +2887,46 @@
             ) {
 
                 console.log("");
-                console.log("----------------------------------------------");
+
+
+                console.log(
+                    "----------------------------------------------"
+                );
+
+
                 console.log(
                     `CHECKPOINT ${completed}/${products.length}`
                 );
+
+
                 console.log(
                     `Variants : ${totalVariants}`
                 );
+
+
                 console.log(
                     `Average  : ${average.toFixed(2)}`
                 );
+
+
                 console.log(
                     `Failed   : ${failedPdpProducts.length}`
                 );
-                console.log("----------------------------------------------");
-                console.log("");
 
+
+                console.log(
+                    "----------------------------------------------"
+                );
+
+
+                console.log("");
             }
 
+
+
+            // ----------------------------------------------------
+            // DELAY BETWEEN PDP REQUESTS
+            // ----------------------------------------------------
 
             await sleep(
                 randomDelay(
@@ -1751,10 +2934,9 @@
                     PDP_DELAY_MAX
                 )
             );
-
         }
-
     }
+
 
 
     // ============================================================
@@ -1762,12 +2944,25 @@
     // ============================================================
 
     console.log("");
-    console.log("==============================================");
+
+
+    console.log(
+        "=============================================="
+    );
+
+
     console.log(
         `FETCHING PDPs USING ${CONCURRENCY} WORKERS`
     );
-    console.log("==============================================");
+
+
+    console.log(
+        "=============================================="
+    );
+
+
     console.log("");
+
 
 
     updateProgress({
@@ -1775,14 +2970,18 @@
         stage:
             "Collecting Variants",
 
+
         current:
             0,
+
 
         total:
             products.length,
 
+
         total_variants:
             0,
+
 
         failed_products:
             0
@@ -1790,18 +2989,30 @@
     });
 
 
+
+    // ============================================================
+    // START WORKERS
+    // ============================================================
+
     await Promise.all(
 
         Array.from(
             {
+
                 length:
                     CONCURRENCY
+
             },
+
             (_, i) =>
-                worker(i + 1)
+                worker(
+                    i + 1
+                )
+
         )
 
     );
+
 
 
     // ============================================================
@@ -1811,7 +3022,9 @@
     const productsWithVariants =
         products.filter(
             p =>
-                Array.isArray(p.variants) &&
+                Array.isArray(
+                    p.variants
+                ) &&
                 p.variants.length > 0
         ).length;
 
@@ -1836,6 +3049,142 @@
         );
 
 
+
+    // ============================================================
+    // PRICE VALIDATION
+    // ============================================================
+
+    const productsWithPrice =
+        products.filter(
+            p =>
+                Number(
+                    p.price || 0
+                ) > 0
+        ).length;
+
+
+    const productsWithoutPrice =
+        products.length -
+        productsWithPrice;
+
+
+    const productsWithPdpPrice =
+        products.filter(
+            p =>
+                p.price_source ===
+                "pdp"
+        ).length;
+
+
+    const productsWithListingPrice =
+        products.filter(
+            p =>
+                p.price_source ===
+                "listing"
+        ).length;
+
+
+    const productsWithNoPrice =
+        products.filter(
+            p =>
+                p.price_source ===
+                "unavailable"
+        ).length;
+
+
+
+    // ============================================================
+    // PRICE VALIDATION LOG
+    // ============================================================
+
+    console.log("");
+
+
+    console.log(
+        "----------------------------------------------"
+    );
+
+
+    console.log(
+        "PRICE VALIDATION"
+    );
+
+
+    console.log(
+        "----------------------------------------------"
+    );
+
+
+    console.log(
+        `Products With Price    : ${productsWithPrice}`
+    );
+
+
+    console.log(
+        `PDP Price              : ${productsWithPdpPrice}`
+    );
+
+
+    console.log(
+        `Listing Price          : ${productsWithListingPrice}`
+    );
+
+
+    console.log(
+        `No Price               : ${productsWithNoPrice}`
+    );
+
+
+    console.log(
+        "----------------------------------------------"
+    );
+
+
+    console.log("");
+
+
+
+    // ============================================================
+    // SHOW FIRST 10 PRICES
+    //
+    // This makes it very easy to verify whether the fix worked.
+    // ============================================================
+
+    console.log(
+        "FIRST 10 PRODUCT PRICES:"
+    );
+
+
+    products
+        .slice(
+            0,
+            10
+        )
+        .forEach(
+            (product, index) => {
+
+                console.log(
+
+                    `${index + 1}. ` +
+
+                    `${product.title}` +
+
+                    ` | Price: ${product.price || 0}` +
+
+                    ` | MRP: ${product.mrp || 0}` +
+
+                    ` | Source: ${product.price_source}`
+
+                );
+
+            }
+        );
+
+
+    console.log("");
+
+
+
     // ============================================================
     // OUTPUT
     // ============================================================
@@ -1845,29 +3194,40 @@
         schema_version:
             1,
 
+
         source:
             "tatacliq",
+
 
         brand:
             "Columbia",
 
+
         platform:
             "Tata Cliq Luxury",
+
 
         scrape_date:
             new Date()
                 .toISOString()
-                .slice(0, 10),
+                .slice(
+                    0,
+                    10
+                ),
+
 
         scraped_at:
             new Date()
                 .toISOString(),
 
+
         expected_products:
             totalResults,
 
+
         total_products:
             products.length,
+
 
         missing_products:
             Math.max(
@@ -1876,22 +3236,50 @@
                 products.length
             ),
 
+
         total_variants:
             totalVariants,
 
+
+        products_with_price:
+            productsWithPrice,
+
+
+        products_without_price:
+            productsWithoutPrice,
+
+
+        products_with_pdp_price:
+            productsWithPdpPrice,
+
+
+        products_with_listing_price:
+            productsWithListingPrice,
+
+
+        products_without_any_price:
+            productsWithNoPrice,
+
+
         average_variants_per_product:
             Number(
-                averageVariants.toFixed(2)
+                averageVariants.toFixed(
+                    2
+                )
             ),
+
 
         products_with_variants:
             productsWithVariants,
 
+
         products_without_variants:
             productsWithoutVariants,
 
+
         failed_pdp_products:
             productsWithErrors,
+
 
         failed_listing_pages:
             listingFailedPages.map(
@@ -1899,16 +3287,17 @@
                     page + 1
             ),
 
+
         failed_product_ids:
             failedPdpProducts,
+
 
         products
 
     };
 
-
-    // ============================================================
-    // DOWNLOAD
+        // ============================================================
+    // DOWNLOAD JSON
     // ============================================================
 
     function downloadJSON(
@@ -1947,6 +3336,7 @@
         a.href =
             url;
 
+
         a.download =
             filename;
 
@@ -1971,8 +3361,8 @@
                 ),
             1000
         );
-
     }
+
 
 
     // ============================================================
@@ -1984,14 +3374,18 @@
         stage:
             "Completed",
 
+
         current:
             products.length,
+
 
         total:
             products.length,
 
+
         total_variants:
             totalVariants,
+
 
         failed_products:
             failedPdpProducts.length
@@ -1999,47 +3393,126 @@
     });
 
 
+
     // ============================================================
     // FINAL REPORT
     // ============================================================
 
     console.log("");
+
+
     console.log("");
-    console.log("==============================================");
-    console.log("              SCRAPE COMPLETE");
-    console.log("==============================================");
+
+
+    console.log(
+        "=============================================="
+    );
+
+
+    console.log(
+        "              SCRAPE COMPLETE"
+    );
+
+
+    console.log(
+        "=============================================="
+    );
+
+
     console.log("");
+
+
     console.log(
         `Expected Products       : ${totalResults}`
     );
+
+
     console.log(
         `Products Collected      : ${products.length}`
     );
+
+
     console.log(
-        `Missing Products        : ${Math.max(0, totalResults - products.length)}`
+        `Missing Products        : ${
+            Math.max(
+                0,
+                totalResults -
+                products.length
+            )
+        }`
     );
+
+
     console.log(
         `Total Variants          : ${totalVariants}`
     );
+
+
+    console.log(
+        `Products With Price     : ${productsWithPrice}`
+    );
+
+
+    console.log(
+        `Products Without Price  : ${productsWithoutPrice}`
+    );
+
+
+    console.log(
+        `PDP Prices              : ${productsWithPdpPrice}`
+    );
+
+
+    console.log(
+        `Listing Prices          : ${productsWithListingPrice}`
+    );
+
+
+    console.log(
+        `No Price                : ${productsWithNoPrice}`
+    );
+
+
     console.log(
         `Average Variants/Product: ${averageVariants.toFixed(2)}`
     );
+
+
     console.log(
         `Products With Variants  : ${productsWithVariants}`
     );
+
+
     console.log(
-        `Products Without       : ${productsWithoutVariants}`
+        `Products Without        : ${productsWithoutVariants}`
     );
+
+
     console.log(
         `Failed PDPs             : ${productsWithErrors}`
     );
+
+
     console.log(
-        `Failed Listing Pages   : ${listingFailedPages.length}`
+        `Failed Listing Pages    : ${listingFailedPages.length}`
     );
-    console.log("");
-    console.log("==============================================");
+
+
     console.log("");
 
+
+    console.log(
+        "=============================================="
+    );
+
+
+    console.log("");
+
+
+
+    // ============================================================
+    // FAILED PDP PRODUCTS
+    // ============================================================
 
     if (
         failedPdpProducts.length
@@ -2049,9 +3522,13 @@
             "Failed PDP product IDs:",
             failedPdpProducts
         );
-
     }
 
+
+
+    // ============================================================
+    // FAILED LISTING PAGES
+    // ============================================================
 
     if (
         listingFailedPages.length
@@ -2060,15 +3537,30 @@
         console.warn(
             "Failed listing pages:",
             listingFailedPages.map(
-                p => p + 1
+                p =>
+                    p + 1
             )
         );
-
     }
 
 
-    window.__TATA_LUX_PRODUCTS__ = output;
-    window.__TATA_LUX_SCRAPER_DONE__ = true;
+
+    // ============================================================
+    // STORE OUTPUT GLOBALLY
+    // ============================================================
+
+    window.__TATA_LUX_PRODUCTS__ =
+        output;
+
+
+    window.__TATA_LUX_SCRAPER_DONE__ =
+        true;
+
+
+
+    // ============================================================
+    // DOWNLOAD
+    // ============================================================
 
     downloadJSON(
         output,
@@ -2080,6 +3572,7 @@
         "Downloaded:",
         "tata_lux_columbia_products.json"
     );
+
 
 
 })();
